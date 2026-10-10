@@ -1,65 +1,144 @@
 
-import { useState } from "react";
-
+import { useEffect, useState } from "react";
 import Stats from "./components/Stats";
 import PatientForm from "./components/PatientForm";
 import QueueList from "./components/QueueList";
+import "./App.css";
 
 function App() {
   const [patientName, setPatientName] = useState("");
   const [patients, setPatients] = useState([]);
-  const [completed, setCompleted] = useState(0);
-  const [nextToken, setNextToken] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  function addPatient() {
+  async function loadPatients() {
+    try {
+      const response = await fetch("/api/patients");
+
+      if (!response.ok) {
+        throw new Error("Unable to load patients");
+      }
+
+      const data = await response.json();
+      setPatients(data);
+      setError("");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadPatients();
+  }, []);
+
+  async function addPatient() {
     const name = patientName.trim();
 
-    if (name === "") {
-      alert("Please enter a patient name");
-      return;
+    if (!name || saving) return;
+
+    setSaving(true);
+
+    try {
+      const response = await fetch("/api/patients", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ name })
+      });
+
+      if (!response.ok) {
+        throw new Error("Unable to add patient");
+      }
+
+      setPatientName("");
+      await loadPatients();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
     }
-
-    const newPatient = {
-      token: nextToken,
-      name: name
-    };
-
-    setPatients(prev => [...prev, newPatient]);
-    setNextToken(prev => prev + 1);
-    setPatientName("");
   }
 
-  function completePatient() {
-    if (patients.length === 0) return;
+  async function completePatient() {
+    const nextPatient = patients.find(
+      patient => patient.status === "waiting"
+    );
 
-    setPatients(prev => prev.slice(1));
-    setCompleted(prev => prev + 1);
+    if (!nextPatient || saving) return;
+
+    setSaving(true);
+
+    try {
+      const response = await fetch(
+        `/api/patients/${nextPatient.id}/complete`,
+        {
+          method: "PATCH"
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Unable to complete consultation");
+      }
+
+      await loadPatients();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const waitingPatients = patients.filter(
+    patient => patient.status === "waiting"
+  );
+
+  const completedPatients = patients.filter(
+    patient => patient.status === "completed"
+  );
 
   return (
-    <div style={{ padding: "30px", maxWidth: "650px", margin: "auto" }}>
-      <h1>MediQueue Hospital Dashboard</h1>
+    <main className="dashboard">
+      <header>
+        <h1>MediQueue Hospital Dashboard</h1>
+        <p>Smart Hospital Queue Management System</p>
+      </header>
 
       <Stats
-        waiting={patients.length}
-        completed={completed}
+        waiting={waitingPatients.length}
+        completed={completedPatients.length}
       />
 
       <PatientForm
         patientName={patientName}
         setPatientName={setPatientName}
         addPatient={addPatient}
+        saving={saving}
       />
 
-      <QueueList patients={patients} />
+      {error && (
+        <p className="error-message" role="alert">
+          {error}
+        </p>
+      )}
+
+      {loading ? (
+        <p>Loading patients...</p>
+      ) : (
+        <QueueList patients={waitingPatients} />
+      )}
 
       <button
+        className="complete-button"
         onClick={completePatient}
-        disabled={patients.length === 0}
+        disabled={waitingPatients.length === 0 || saving}
       >
         Complete Next Patient
       </button>
-    </div>
+    </main>
   );
 }
 

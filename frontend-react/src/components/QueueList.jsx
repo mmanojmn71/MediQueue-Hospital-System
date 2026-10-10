@@ -1,21 +1,31 @@
 
 function QueueList({ patients }) {
   return (
-    <div>
+    <section className="queue-section">
       <h2>Patient Queue</h2>
 
       {patients.length === 0 ? (
         <p>No patients waiting</p>
       ) : (
-        <ul>
-          {patients.map((patient) => (
-            <li key={patient.token}>
-              Token A-{patient.token}: {patient.name}
-            </li>
+        <div className="patient-list">
+          {patients.map((patient, index) => (
+            <div className="patient-row" key={patient.id}>
+              <span className="token">
+                A-{patient.token}
+              </span>
+
+              <span className="patient-name">
+                {patient.name}
+              </span>
+
+              <span className="patient-status">
+                {index === 0 ? "Next" : "Waiting"}
+              </span>
+            </div>
           ))}
-        </ul>
+        </div>
       )}
-    </div>
+    </section>
   );
 }
 

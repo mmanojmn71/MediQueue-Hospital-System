@@ -1,9 +1,16 @@
 
 function Stats({ waiting, completed }) {
   return (
-    <div>
-      <h2>Patients Waiting: {waiting}</h2>
-      <h2>Consultations Completed: {completed}</h2>
+    <div className="stats-container">
+      <div className="stat-card">
+        <h3>Patients Waiting</h3>
+        <p>{waiting}</p>
+      </div>
+
+      <div className="stat-card">
+        <h3>Consultations Completed</h3>
+        <p>{completed}</p>
+      </div>
     </div>
   );
 }

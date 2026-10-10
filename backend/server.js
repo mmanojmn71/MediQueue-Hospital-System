@@ -1,12 +1,16 @@
 
+require("dotenv").config();
+
 const express = require("express");
+const mongoose = require("mongoose");
+const connectDB = require("./config/db");
+const Patient = require("./models/Patient");
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.use(express.json());
 
-// Fictional hospital data
 const hospitals = [
   {
     id: 1,
@@ -31,77 +35,109 @@ const hospitals = [
   }
 ];
 
-// Temporary data, lost when server restarts
-const patients = [];
-let nextPatientId = 1;
-let nextToken = 1;
-
-// Home
+// Home API
 app.get("/", (req, res) => {
   res.send("Welcome to MediQueue Backend!");
 });
 
-// Get hospitals
+// GET hospitals
 app.get("/api/hospitals", (req, res) => {
   res.json(hospitals);
 });
 
-// Get all patients
-app.get("/api/patients", (req, res) => {
-  res.json(patients);
-});
-
-// Add patient
-app.post("/api/patients", (req, res) => {
-  const { name } = req.body || {};
-
-  if (typeof name !== "string" || !name.trim()) {
-    return res.status(400).json({
-      message: "Patient name is required"
+// GET patients from MongoDB
+app.get("/api/patients", async (req, res) => {
+  try {
+    const patients = await Patient.find().sort({ token: 1 });
+    res.json(patients);
+  } catch (error) {
+    res.status(500).json({
+      message: "Unable to load patients"
     });
   }
+});
 
-  const newPatient = {
-    id: nextPatientId++,
-    name: name.trim(),
-    token: nextToken++,
-    status: "waiting"
-  };
+// POST a patient to MongoDB
+app.post("/api/patients", async (req, res) => {
+  try {
+    const { name } = req.body || {};
 
-  patients.push(newPatient);
+    if (typeof name !== "string" || !name.trim() ||
+        name.trim().length > 100) {
+      return res.status(400).json({
+        message: "Enter a valid patient name"
+      });
+    }
 
-  res.status(201).json({
-    message: "Patient added successfully",
-    patient: newPatient
+    // Temporary token logic for learning
+    const lastPatient = await Patient.findOne()
+      .sort({ token: -1 });
+
+    const nextToken = lastPatient ? lastPatient.token + 1 : 1;
+
+    const patient = await Patient.create({
+      name: name.trim(),
+      token: nextToken,
+      status: "waiting"
+    });
+
+    res.status(201).json({
+      message: "Patient saved successfully",
+      patient
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Unable to save patient"
+    });
+  }
+});
+
+// PATCH consultation status
+app.patch("/api/patients/:id/complete", async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        message: "Invalid patient ID"
+      });
+    }
+
+    const patient = await Patient.findOneAndUpdate(
+      {
+        _id: req.params.id,
+        status: "waiting"
+      },
+      {
+        $set: { status: "completed" }
+      },
+      {
+        returnDocument: "after",
+        runValidators: true
+      }
+    );
+
+    if (!patient) {
+      return res.status(404).json({
+        message: "Waiting patient not found"
+      });
+    }
+
+    res.json({
+      message: "Consultation completed",
+      patient
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Unable to complete consultation"
+    });
+  }
+});
+
+async function startServer() {
+  await connectDB();
+
+  app.listen(PORT, () => {
+    console.log(`MediQueue Backend running on port ${PORT}`);
   });
-});
+}
 
-// Complete consultation
-app.patch("/api/patients/:id/complete", (req, res) => {
-  const id = Number(req.params.id);
-
-  const patient = patients.find(p => p.id === id);
-
-  if (!patient) {
-    return res.status(404).json({
-      message: "Patient not found"
-    });
-  }
-
-  if (patient.status === "completed") {
-    return res.status(409).json({
-      message: "Consultation already completed"
-    });
-  }
-
-  patient.status = "completed";
-
-  res.json({
-    message: "Consultation completed successfully",
-    patient
-  });
-});
-
-app.listen(PORT, () => {
-  console.log(`MediQueue Backend running on port ${PORT}`);
-});
+startServer();

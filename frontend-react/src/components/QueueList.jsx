@@ -8,8 +8,13 @@ function QueueList({ patients }) {
         <p>No patients waiting</p>
       ) : (
         <div className="patient-list">
+
           {patients.map((patient, index) => (
-            <div className="patient-row" key={patient.id}>
+            <div
+              className="patient-row"
+              key={patient._id}
+            >
+
               <span className="token">
                 A-{patient.token}
               </span>
@@ -21,8 +26,10 @@ function QueueList({ patients }) {
               <span className="patient-status">
                 {index === 0 ? "Next" : "Waiting"}
               </span>
+
             </div>
           ))}
+
         </div>
       )}
     </section>

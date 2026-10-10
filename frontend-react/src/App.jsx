@@ -12,6 +12,7 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  // GET patients from MongoDB through Express
   async function loadPatients() {
     try {
       const response = await fetch("/api/patients");
@@ -21,6 +22,7 @@ function App() {
       }
 
       const data = await response.json();
+
       setPatients(data);
       setError("");
     } catch (err) {
@@ -30,16 +32,21 @@ function App() {
     }
   }
 
+  // Load patients when webpage opens
   useEffect(() => {
     loadPatients();
   }, []);
 
+  // POST: Add patient to MongoDB
   async function addPatient() {
     const name = patientName.trim();
 
-    if (!name || saving) return;
+    if (!name || saving) {
+      return;
+    }
 
     setSaving(true);
+    setError("");
 
     try {
       const response = await fetch("/api/patients", {
@@ -63,18 +70,22 @@ function App() {
     }
   }
 
+  // PATCH: Complete next patient's consultation
   async function completePatient() {
     const nextPatient = patients.find(
       patient => patient.status === "waiting"
     );
 
-    if (!nextPatient || saving) return;
+    if (!nextPatient || saving) {
+      return;
+    }
 
     setSaving(true);
+    setError("");
 
     try {
       const response = await fetch(
-        `/api/patients/${nextPatient.id}/complete`,
+        `/api/patients/${nextPatient._id}/complete`,
         {
           method: "PATCH"
         }
@@ -92,6 +103,7 @@ function App() {
     }
   }
 
+  // Calculate dashboard statistics
   const waitingPatients = patients.filter(
     patient => patient.status === "waiting"
   );
@@ -102,6 +114,7 @@ function App() {
 
   return (
     <main className="dashboard">
+
       <header>
         <h1>MediQueue Hospital Dashboard</h1>
         <p>Smart Hospital Queue Management System</p>
@@ -136,8 +149,9 @@ function App() {
         onClick={completePatient}
         disabled={waitingPatients.length === 0 || saving}
       >
-        Complete Next Patient
+        {saving ? "Processing..." : "Complete Next Patient"}
       </button>
+
     </main>
   );
 }

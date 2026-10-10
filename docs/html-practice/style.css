@@ -1,0 +1,35 @@
+
+body {
+    font-family: Arial, sans-serif;
+    background-color: white;
+    text-align: center;
+    margin: 0;
+    padding: 30px;
+}
+
+h1 {
+    color: green;
+    font-size: 36px;
+}
+
+h2 {
+    color: #333;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+}
+
+li {
+    padding: 10px;
+}
+
+button {
+    background-color: #0066cc;
+    color: white;
+    padding: 15px 30px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}

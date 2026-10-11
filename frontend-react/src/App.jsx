@@ -1,8 +1,11 @@
 
 import { useEffect, useState } from "react";
+
 import Stats from "./components/Stats";
 import PatientForm from "./components/PatientForm";
 import QueueList from "./components/QueueList";
+import DoctorList from "./components/DoctorList";
+
 import "./App.css";
 
 function App() {
@@ -12,7 +15,7 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // GET patients from MongoDB through Express
+  // GET: Load patients from MongoDB
   async function loadPatients() {
     try {
       const response = await fetch("/api/patients");
@@ -22,7 +25,6 @@ function App() {
       }
 
       const data = await response.json();
-
       setPatients(data);
       setError("");
     } catch (err) {
@@ -32,12 +34,11 @@ function App() {
     }
   }
 
-  // Load patients when webpage opens
   useEffect(() => {
     loadPatients();
   }, []);
 
-  // POST: Add patient to MongoDB
+  // POST: Add patient
   async function addPatient() {
     const name = patientName.trim();
 
@@ -70,7 +71,7 @@ function App() {
     }
   }
 
-  // PATCH: Complete next patient's consultation
+  // PATCH: Complete consultation
   async function completePatient() {
     const nextPatient = patients.find(
       patient => patient.status === "waiting"
@@ -103,7 +104,6 @@ function App() {
     }
   }
 
-  // Calculate dashboard statistics
   const waitingPatients = patients.filter(
     patient => patient.status === "waiting"
   );
@@ -114,7 +114,6 @@ function App() {
 
   return (
     <main className="dashboard">
-
       <header>
         <h1>MediQueue Hospital Dashboard</h1>
         <p>Smart Hospital Queue Management System</p>
@@ -152,6 +151,8 @@ function App() {
         {saving ? "Processing..." : "Complete Next Patient"}
       </button>
 
+      {/* Display doctor information */}
+      <DoctorList />
     </main>
   );
 }

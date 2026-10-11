@@ -148,3 +148,111 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================= */
+/* DOCTOR MANAGEMENT SECTION     */
+/* ============================= */
+
+.doctor-section {
+  margin-top: 50px;
+  padding-top: 30px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.doctor-heading {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.doctor-heading h2 {
+  font-size: 28px;
+  color: #1264aa;
+  margin-bottom: 10px;
+}
+
+.doctor-heading p {
+  font-size: 15px;
+  color: #64748b;
+}
+
+.doctor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.doctor-card {
+  background: white;
+  padding: 25px 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  text-align: center;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s;
+}
+
+.doctor-card:hover {
+  transform: translateY(-4px);
+}
+
+.doctor-avatar {
+  width: 75px;
+  height: 75px;
+  margin: 0 auto 15px;
+  border-radius: 50%;
+  background: #e0f2fe;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 35px;
+}
+
+.doctor-card h3 {
+  color: #1e293b;
+  font-size: 18px;
+  margin: 10px 0;
+}
+
+.doctor-specialization {
+  color: #1264aa;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.doctor-hospital,
+.doctor-location {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.doctor-status {
+  display: inline-block;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 12px;
+}
+
+.doctor-status.available {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.doctor-status.unavailable {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+@media (max-width: 800px) {
+  .doctor-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 550px) {
+  .doctor-grid {
+    grid-template-columns: 1fr;
+  }
+}

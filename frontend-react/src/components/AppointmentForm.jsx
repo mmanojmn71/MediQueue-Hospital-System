@@ -9,21 +9,22 @@ function getTodayIndia() {
     day: "2-digit"
   }).formatToParts(new Date());
 
-  const value = type =>
+  const get = type =>
     parts.find(part => part.type === type).value;
 
-  return `${value("year")}-${value("month")}-${value("day")}`;
+  return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
 function formatTime(time) {
   const [hour, minute] = time.split(":").map(Number);
-  const suffix = hour >= 12 ? "PM" : "AM";
-  const hour12 = hour % 12 || 12;
 
-  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+  const hour12 = hour % 12 || 12;
+  const period = hour >= 12 ? "PM" : "AM";
+
+  return `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
-function AppointmentForm() {
+function AppointmentForm({ onAppointmentBooked }) {
   const [hospitals, setHospitals] = useState([]);
   const [doctors, setDoctors] = useState([]);
 
@@ -43,7 +44,7 @@ function AppointmentForm() {
   const [confirmation, setConfirmation] = useState(null);
   const [refreshCount, setRefreshCount] = useState(0);
 
-  // Load hospital and doctor options
+  // Load hospitals and doctors
   useEffect(() => {
     const controller = new AbortController();
 
@@ -92,7 +93,7 @@ function AppointmentForm() {
       doctor.isAvailable === true
   );
 
-  // Load availability when doctor or date changes
+  // Fetch dynamic slots whenever the selection changes
   useEffect(() => {
     if (!doctorId || !date) {
       setSlots([]);
@@ -103,7 +104,6 @@ function AppointmentForm() {
 
     const controller = new AbortController();
 
-    // Reset previous selection and slots
     setTime("");
     setSlots([]);
     setSlotsLoading(true);
@@ -118,9 +118,7 @@ function AppointmentForm() {
 
         const response = await fetch(
           `/api/appointments/slots?${query.toString()}`,
-          {
-            signal: controller.signal
-          }
+          { signal: controller.signal }
         );
 
         const result = await response.json();
@@ -150,31 +148,30 @@ function AppointmentForm() {
     return () => controller.abort();
   }, [doctorId, date, refreshCount]);
 
-  function handleHospitalChange(event) {
+  function changeHospital(event) {
     setHospitalId(event.target.value);
     setDoctorId("");
     setDate("");
     setTime("");
     setSlots([]);
-    setSlotsError("");
     setError("");
     setConfirmation(null);
   }
 
-  function handleDoctorChange(event) {
+  function changeDoctor(event) {
     setDoctorId(event.target.value);
     setTime("");
     setSlots([]);
-    setConfirmation(null);
     setError("");
+    setConfirmation(null);
   }
 
-  function handleDateChange(event) {
+  function changeDate(event) {
     setDate(event.target.value);
     setTime("");
     setSlots([]);
-    setConfirmation(null);
     setError("");
+    setConfirmation(null);
   }
 
   async function handleSubmit(event) {
@@ -189,7 +186,7 @@ function AppointmentForm() {
     );
 
     if (!selectedSlot?.available) {
-      setError("Please select an available time slot");
+      setError("Please select an available slot");
       return;
     }
 
@@ -222,22 +219,27 @@ function AppointmentForm() {
 
       setConfirmation({
         ...result.appointment,
-        hospitalName:
-          hospitals.find(h => h._id === hospitalId)?.name,
-        doctorName:
-          doctors.find(d => d._id === doctorId)?.name
+        hospitalName: hospitals.find(
+          hospital => hospital._id === hospitalId
+        )?.name,
+        doctorName: doctors.find(
+          doctor => doctor._id === doctorId
+        )?.name
       });
+
+      // Tell App.jsx to refresh appointment history
+      if (onAppointmentBooked) {
+        onAppointmentBooked();
+      }
 
       setPatientName("");
       setTime("");
 
-      // Reload slots after booking.
+      // Refresh available slots
       setRefreshCount(count => count + 1);
 
     } catch (err) {
       setError(err.message);
-
-      // Refresh availability when booking is rejected.
       setRefreshCount(count => count + 1);
     } finally {
       setSubmitting(false);
@@ -262,7 +264,7 @@ function AppointmentForm() {
       <div className="section-title">
         <h2>Book an Appointment</h2>
         <p>
-          Select a hospital, doctor, date and available slot.
+          Select your hospital, doctor, date and time.
         </p>
       </div>
 
@@ -270,11 +272,12 @@ function AppointmentForm() {
         className="appointment-form"
         onSubmit={handleSubmit}
       >
-        <label htmlFor="booking-patient">
+        <label htmlFor="booking-name">
           Patient Name
         </label>
+
         <input
-          id="booking-patient"
+          id="booking-name"
           type="text"
           placeholder="Enter patient name"
           value={patientName}
@@ -288,13 +291,15 @@ function AppointmentForm() {
         <label htmlFor="booking-hospital">
           Select Hospital
         </label>
+
         <select
           id="booking-hospital"
           value={hospitalId}
-          onChange={handleHospitalChange}
+          onChange={changeHospital}
           required
         >
           <option value="">Choose Hospital</option>
+
           {hospitals.map(hospital => (
             <option
               key={hospital._id}
@@ -308,14 +313,16 @@ function AppointmentForm() {
         <label htmlFor="booking-doctor">
           Select Doctor
         </label>
+
         <select
           id="booking-doctor"
           value={doctorId}
-          onChange={handleDoctorChange}
+          onChange={changeDoctor}
           disabled={!hospitalId}
           required
         >
           <option value="">Choose Doctor</option>
+
           {filteredDoctors.map(doctor => (
             <option
               key={doctor._id}
@@ -329,12 +336,13 @@ function AppointmentForm() {
         <label htmlFor="booking-date">
           Appointment Date
         </label>
+
         <input
           id="booking-date"
           type="date"
           min={getTodayIndia()}
           value={date}
-          onChange={handleDateChange}
+          onChange={changeDate}
           required
         />
 
@@ -356,11 +364,11 @@ function AppointmentForm() {
           </p>
         )}
 
-        {!doctorId || !date ? (
+        {(!doctorId || !date) && (
           <p className="booking-note">
-            Select a doctor and appointment date to see slots.
+            Select a doctor and date to view available slots.
           </p>
-        ) : null}
+        )}
 
         {!slotsLoading &&
           !slotsError &&
@@ -370,9 +378,7 @@ function AppointmentForm() {
                 <button
                   key={slot.time}
                   type="button"
-                  disabled={
-                    !slot.available || submitting
-                  }
+                  disabled={!slot.available || submitting}
                   className={
                     !slot.available
                       ? "slot-button booked"
@@ -398,7 +404,7 @@ function AppointmentForm() {
 
         <p className="booking-note">
           Demo schedule: Monday–Friday, 9:00 AM–4:30 PM.
-          Bookings are subject to server confirmation.
+          The backend confirms whether a slot is still available.
         </p>
 
         <button
@@ -416,7 +422,7 @@ function AppointmentForm() {
           }
         >
           {submitting
-            ? "Booking..."
+            ? "Booking Appointment..."
             : "Confirm Appointment"}
         </button>
       </form>

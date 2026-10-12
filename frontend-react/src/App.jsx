@@ -6,6 +6,7 @@ import PatientForm from "./components/PatientForm";
 import QueueList from "./components/QueueList";
 import DoctorList from "./components/DoctorList";
 import AppointmentForm from "./components/AppointmentForm";
+import AppointmentHistory from "./components/AppointmentHistory";
 
 import "./App.css";
 
@@ -15,6 +16,8 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   async function loadPatients() {
     try {
@@ -105,6 +108,10 @@ function App() {
     }
   }
 
+  function handleAppointmentBooked() {
+    setHistoryRefreshKey(previous => previous + 1);
+  }
+
   const waitingPatients = patients.filter(
     patient => patient.status === "waiting"
   );
@@ -154,7 +161,13 @@ function App() {
 
       <DoctorList />
 
-      <AppointmentForm />
+      <AppointmentForm
+        onAppointmentBooked={handleAppointmentBooked}
+      />
+
+      <AppointmentHistory
+        refreshKey={historyRefreshKey}
+      />
     </main>
   );
 }

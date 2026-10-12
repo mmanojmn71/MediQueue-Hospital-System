@@ -5,6 +5,7 @@ import Stats from "./components/Stats";
 import PatientForm from "./components/PatientForm";
 import QueueList from "./components/QueueList";
 import DoctorList from "./components/DoctorList";
+import AppointmentForm from "./components/AppointmentForm";
 
 import "./App.css";
 
@@ -15,7 +16,6 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // GET: Load patients from MongoDB
   async function loadPatients() {
     try {
       const response = await fetch("/api/patients");
@@ -25,6 +25,7 @@ function App() {
       }
 
       const data = await response.json();
+
       setPatients(data);
       setError("");
     } catch (err) {
@@ -38,13 +39,10 @@ function App() {
     loadPatients();
   }, []);
 
-  // POST: Add patient
   async function addPatient() {
     const name = patientName.trim();
 
-    if (!name || saving) {
-      return;
-    }
+    if (!name || saving) return;
 
     setSaving(true);
     setError("");
@@ -58,8 +56,12 @@ function App() {
         body: JSON.stringify({ name })
       });
 
+      const result = await response.json();
+
       if (!response.ok) {
-        throw new Error("Unable to add patient");
+        throw new Error(
+          result.message || "Unable to add patient"
+        );
       }
 
       setPatientName("");
@@ -71,15 +73,12 @@ function App() {
     }
   }
 
-  // PATCH: Complete consultation
   async function completePatient() {
     const nextPatient = patients.find(
       patient => patient.status === "waiting"
     );
 
-    if (!nextPatient || saving) {
-      return;
-    }
+    if (!nextPatient || saving) return;
 
     setSaving(true);
     setError("");
@@ -87,13 +86,15 @@ function App() {
     try {
       const response = await fetch(
         `/api/patients/${nextPatient._id}/complete`,
-        {
-          method: "PATCH"
-        }
+        { method: "PATCH" }
       );
 
+      const result = await response.json();
+
       if (!response.ok) {
-        throw new Error("Unable to complete consultation");
+        throw new Error(
+          result.message || "Unable to complete consultation"
+        );
       }
 
       await loadPatients();
@@ -114,7 +115,7 @@ function App() {
 
   return (
     <main className="dashboard">
-      <header>
+      <header className="dashboard-header">
         <h1>MediQueue Hospital Dashboard</h1>
         <p>Smart Hospital Queue Management System</p>
       </header>
@@ -146,13 +147,14 @@ function App() {
       <button
         className="complete-button"
         onClick={completePatient}
-        disabled={waitingPatients.length === 0 || saving}
+        disabled={saving || waitingPatients.length === 0}
       >
         {saving ? "Processing..." : "Complete Next Patient"}
       </button>
 
-      {/* Display doctor information */}
       <DoctorList />
+
+      <AppointmentForm />
     </main>
   );
 }

@@ -17,7 +17,7 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 
 // ====================================
-// HELPERS
+// HELPER FUNCTIONS
 // ====================================
 
 function validDate(date) {
@@ -72,7 +72,7 @@ function generateSlots() {
 const TIME_SLOTS = generateSlots();
 
 // ====================================
-// HOME
+// HOME ROUTE
 // ====================================
 
 app.get("/", (req, res) => {
@@ -82,7 +82,7 @@ app.get("/", (req, res) => {
 });
 
 // ====================================
-// HOSPITALS
+// HOSPITAL ROUTES
 // ====================================
 
 app.get("/api/hospitals", async (req, res) => {
@@ -101,7 +101,7 @@ app.get("/api/hospitals", async (req, res) => {
 });
 
 // ====================================
-// DOCTORS
+// DOCTOR ROUTES
 // ====================================
 
 app.get("/api/doctors", async (req, res) => {
@@ -121,7 +121,7 @@ app.get("/api/doctors", async (req, res) => {
 });
 
 // ====================================
-// PATIENT QUEUE - GET
+// GET PATIENT QUEUE
 // ====================================
 
 app.get("/api/patients", async (req, res) => {
@@ -140,7 +140,7 @@ app.get("/api/patients", async (req, res) => {
 });
 
 // ====================================
-// PATIENT QUEUE - POST
+// ADD PATIENT
 // ====================================
 
 app.post("/api/patients", async (req, res) => {
@@ -237,7 +237,7 @@ app.patch(
 );
 
 // ====================================
-// DYNAMIC APPOINTMENT AVAILABILITY
+// GET AVAILABLE APPOINTMENT SLOTS
 // ====================================
 
 app.get(
@@ -277,7 +277,9 @@ app.get(
       }).select("appointmentTime");
 
       const bookedTimes = new Set(
-        appointments.map(a => a.appointmentTime)
+        appointments.map(
+          appointment => appointment.appointmentTime
+        )
       );
 
       const now = getIndiaNow();
@@ -329,8 +331,8 @@ app.get(
 
 app.get("/api/appointments", async (req, res) => {
   try {
-    // Only return records using the new schema.
-    // Older appointments remain preserved in MongoDB.
+    // Keep legacy documents in MongoDB, but only
+    // display records using the current schema.
     const appointments = await Appointment.find({
       hospital: { $type: "objectId" },
       doctor: { $type: "objectId" }
@@ -369,7 +371,6 @@ app.post("/api/appointments", async (req, res) => {
       appointmentTime
     } = req.body || {};
 
-    // Validate patient name
     if (
       typeof patientName !== "string" ||
       !patientName.trim() ||
@@ -380,7 +381,6 @@ app.post("/api/appointments", async (req, res) => {
       });
     }
 
-    // Validate IDs
     if (
       typeof hospital !== "string" ||
       typeof doctor !== "string" ||
@@ -392,7 +392,6 @@ app.post("/api/appointments", async (req, res) => {
       });
     }
 
-    // Validate date and slot
     if (
       !validDate(appointmentDate) ||
       !TIME_SLOTS.includes(appointmentTime)
@@ -420,7 +419,8 @@ app.post("/api/appointments", async (req, res) => {
 
     if (!doctorRecord) {
       return res.status(400).json({
-        message: "Doctor is unavailable or belongs to another hospital"
+        message:
+          "Doctor is unavailable or belongs to another hospital"
       });
     }
 
@@ -444,8 +444,8 @@ app.post("/api/appointments", async (req, res) => {
       });
     }
 
-    // The unique MongoDB index prevents a second
-    // active booking for the same doctor/date/time.
+    // MongoDB unique partial index protects
+    // active bookings for each doctor/date/time.
     const appointment = await Appointment.create({
       patientName: patientName.trim(),
       hospital,
@@ -459,7 +459,6 @@ app.post("/api/appointments", async (req, res) => {
       message: "Appointment booked successfully",
       appointment
     });
-
   } catch (error) {
     if (error.code === 11000) {
       return res.status(409).json({
@@ -479,14 +478,73 @@ app.post("/api/appointments", async (req, res) => {
 });
 
 // ====================================
-// START SERVER
+// DAY 34 - CANCEL AN APPOINTMENT
+// ====================================
+
+app.patch(
+  "/api/appointments/:id/cancel",
+  async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!mongoose.isValidObjectId(id)) {
+        return res.status(400).json({
+          message: "Invalid appointment ID"
+        });
+      }
+
+      // Only an actively booked appointment
+      // can be changed to cancelled.
+      const appointment = await Appointment.findOneAndUpdate(
+        {
+          _id: id,
+          status: "booked"
+        },
+        {
+          $set: {
+            status: "cancelled"
+          }
+        },
+        {
+          returnDocument: "after",
+          runValidators: true
+        }
+      )
+        .populate("hospital", "name location")
+        .populate("doctor", "name specialization");
+
+      if (!appointment) {
+        return res.status(404).json({
+          message:
+            "Booked appointment not found or already cancelled"
+        });
+      }
+
+      return res.json({
+        message: "Appointment cancelled successfully",
+        appointment
+      });
+    } catch (error) {
+      console.error(
+        "Appointment cancellation error:",
+        error.message
+      );
+
+      return res.status(500).json({
+        message: "Unable to cancel appointment"
+      });
+    }
+  }
+);
+
+// ====================================
+// START EXPRESS SERVER
 // ====================================
 
 async function startServer() {
   try {
     await connectDB();
 
-    // Wait for MongoDB appointment indexes.
     await Appointment.init();
 
     app.listen(PORT, () => {

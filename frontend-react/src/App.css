@@ -185,3 +185,60 @@
     align-items: flex-start;
   }
 }
+
+/* ===================================== */
+/* DAY 34 - APPOINTMENT CANCELLATION     */
+/* ===================================== */
+
+.cancel-appointment-button {
+  width: 100%;
+  padding: 12px 16px;
+  margin-top: 15px;
+  background: #dc2626;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cancel-appointment-button:hover {
+  background: #b91c1c;
+}
+
+.cancel-appointment-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cancel-success {
+  margin: 18px 0;
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: #dcfce7;
+  color: #166534;
+  font-weight: 600;
+}
+
+.cancelled-label {
+  margin-top: 15px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* Make cancellation controls mobile-friendly */
+
+@media (max-width: 600px) {
+  .cancel-appointment-button {
+    padding: 14px;
+    font-size: 14px;
+  }
+}
+

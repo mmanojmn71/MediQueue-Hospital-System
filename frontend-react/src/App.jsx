@@ -17,7 +17,11 @@ function App() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [historyRefreshKey, setHistoryRefreshKey] =
+    useState(0);
+
+  const [availabilityRefreshKey, setAvailabilityRefreshKey] =
+    useState(0);
 
   async function loadPatients() {
     try {
@@ -108,8 +112,18 @@ function App() {
     }
   }
 
+  // Called when a new booking succeeds
   function handleAppointmentBooked() {
-    setHistoryRefreshKey(previous => previous + 1);
+    setHistoryRefreshKey(value => value + 1);
+  }
+
+  // Called when a booking is cancelled
+  function handleAppointmentCancelled() {
+    setHistoryRefreshKey(value => value + 1);
+
+    // Remount the form so it reloads slot availability.
+    // This also clears an unfinished form selection.
+    setAvailabilityRefreshKey(value => value + 1);
   }
 
   const waitingPatients = patients.filter(
@@ -162,11 +176,13 @@ function App() {
       <DoctorList />
 
       <AppointmentForm
+        key={availabilityRefreshKey}
         onAppointmentBooked={handleAppointmentBooked}
       />
 
       <AppointmentHistory
         refreshKey={historyRefreshKey}
+        onAppointmentCancelled={handleAppointmentCancelled}
       />
     </main>
   );

@@ -38,11 +38,9 @@ function AppointmentHistory({
   const [filter, setFilter] = useState("all");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [cancellingId, setCancellingId] = useState(null);
+  const [processingId, setProcessingId] = useState(null);
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
 
-  // Retrieve appointments after booking,
-  // cancellation, or clicking Refresh.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -90,25 +88,28 @@ function AppointmentHistory({
     setManualRefreshKey(value => value + 1);
   }
 
-  // DAY 34: Cancel an appointment
-  async function handleCancel(appointment) {
-    if (cancellingId) return;
+  async function updateAppointment(appointment, action) {
+    if (processingId) return;
+
+    const actionText =
+      action === "complete"
+        ? "mark as completed"
+        : "cancel";
 
     const confirmed = window.confirm(
-      `Cancel the appointment for ${appointment.patientName} ` +
-      `on ${formatDate(appointment.appointmentDate)} ` +
-      `at ${formatTime(appointment.appointmentTime)}?`
+      `Do you want to ${actionText} the appointment ` +
+      `for ${appointment.patientName}?`
     );
 
     if (!confirmed) return;
 
-    setCancellingId(appointment._id);
+    setProcessingId(appointment._id);
     setError("");
     setSuccess("");
 
     try {
       const response = await fetch(
-        `/api/appointments/${appointment._id}/cancel`,
+        `/api/appointments/${appointment._id}/${action}`,
         { method: "PATCH" }
       );
 
@@ -116,25 +117,24 @@ function AppointmentHistory({
 
       if (!response.ok) {
         throw new Error(
-          result.message || "Unable to cancel appointment"
+          result.message || "Unable to update appointment"
         );
       }
 
-      // Update the card immediately.
+      const newStatus =
+        action === "complete" ? "completed" : "cancelled";
+
       setAppointments(previous =>
         previous.map(item =>
           item._id === appointment._id
-            ? {
-                ...item,
-                status: "cancelled"
-              }
+            ? { ...item, status: newStatus }
             : item
         )
       );
 
-      setSuccess("Appointment cancelled successfully");
+      setSuccess(result.message);
 
-      // Refresh appointment history and free slots.
+      // Existing callback refreshes history and slots.
       if (onAppointmentCancelled) {
         onAppointmentCancelled();
       }
@@ -142,7 +142,7 @@ function AppointmentHistory({
     } catch (err) {
       setError(err.message);
     } finally {
-      setCancellingId(null);
+      setProcessingId(null);
     }
   }
 
@@ -152,15 +152,15 @@ function AppointmentHistory({
   );
 
   const bookedCount = appointments.filter(
-    appointment => appointment.status === "booked"
+    a => a.status === "booked"
   ).length;
 
   const completedCount = appointments.filter(
-    appointment => appointment.status === "completed"
+    a => a.status === "completed"
   ).length;
 
   const cancelledCount = appointments.filter(
-    appointment => appointment.status === "cancelled"
+    a => a.status === "cancelled"
   ).length;
 
   return (
@@ -168,16 +168,18 @@ function AppointmentHistory({
       <div className="history-header">
         <div>
           <h2>Appointment History</h2>
-          <p>
-            View and manage demo appointments in MongoDB.
-          </p>
+          <p>Manage demo appointments stored in MongoDB.</p>
         </div>
 
         <button
-          type="button"
           className="history-refresh"
+          type="button"
           onClick={handleRefresh}
-          disabled={loading || refreshing || Boolean(cancellingId)}
+          disabled={
+            loading ||
+            refreshing ||
+            Boolean(processingId)
+          }
         >
           {refreshing ? "Refreshing..." : "Refresh"}
         </button>
@@ -290,16 +292,39 @@ function AppointmentHistory({
               </p>
 
               {appointment.status === "booked" && (
-                <button
-                  type="button"
-                  className="cancel-appointment-button"
-                  disabled={Boolean(cancellingId)}
-                  onClick={() => handleCancel(appointment)}
-                >
-                  {cancellingId === appointment._id
-                    ? "Cancelling..."
-                    : "Cancel Appointment"}
-                </button>
+                <div className="history-actions">
+                  <button
+                    type="button"
+                    className="complete-appointment-button"
+                    disabled={Boolean(processingId)}
+                    onClick={() =>
+                      updateAppointment(appointment, "complete")
+                    }
+                  >
+                    {processingId === appointment._id
+                      ? "Processing..."
+                      : "Mark as Completed"}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="cancel-appointment-button"
+                    disabled={Boolean(processingId)}
+                    onClick={() =>
+                      updateAppointment(appointment, "cancel")
+                    }
+                  >
+                    {processingId === appointment._id
+                      ? "Processing..."
+                      : "Cancel Appointment"}
+                  </button>
+                </div>
+              )}
+
+              {appointment.status === "completed" && (
+                <p className="completed-label">
+                  Consultation completed.
+                </p>
               )}
 
               {appointment.status === "cancelled" && (

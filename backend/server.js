@@ -20,6 +20,7 @@ app.use(express.json());
 // HELPER FUNCTIONS
 // =====================================
 
+// Validate actual calendar dates.
 function validDate(date) {
   if (
     typeof date !== "string" ||
@@ -36,6 +37,7 @@ function validDate(date) {
   );
 }
 
+// Demo hospitals use Indian Standard Time.
 function getIndiaNow() {
   const now = new Date(Date.now() + 330 * 60000);
 
@@ -45,30 +47,106 @@ function getIndiaNow() {
   };
 }
 
-function isWeekend(date) {
-  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-  return day === 0 || day === 6;
+// 0 = Sunday, 1 = Monday, ..., 6 = Saturday.
+function getDayOfWeek(date) {
+  return new Date(
+    `${date}T00:00:00Z`
+  ).getUTCDay();
 }
 
-function generateSlots() {
+// Convert HH:MM to minutes since midnight.
+function toMinutes(time) {
+  const [hour, minute] = time.split(":").map(Number);
+
+  return hour * 60 + minute;
+}
+
+// Convert minutes since midnight to HH:MM.
+function toTime(minutes) {
+  const hour = Math.floor(minutes / 60);
+  const minute = minutes % 60;
+
+  return (
+    `${String(hour).padStart(2, "0")}:` +
+    `${String(minute).padStart(2, "0")}`
+  );
+}
+
+// =====================================
+// DAY 36: DOCTOR-SPECIFIC SLOTS
+// =====================================
+
+// Generate slots using the doctor's schedule.
+// The endTime is exclusive.
+//
+// Example:
+// startTime = 09:00
+// endTime = 13:00
+// duration = 30
+//
+// Slots: 09:00, 09:30, ..., 12:30
+function generateDoctorSlots(doctor, date) {
+  if (!doctor || !validDate(date)) {
+    return [];
+  }
+
+  const weekday = getDayOfWeek(date);
+
+  const workingDay = doctor.workingSchedule?.find(
+    schedule => schedule.dayOfWeek === weekday
+  );
+
+  if (!workingDay) {
+    return [];
+  }
+
+  const duration = doctor.slotDurationMinutes;
+
+  if (![15, 30, 60].includes(duration)) {
+    return [];
+  }
+
+  const startMinutes = toMinutes(
+    workingDay.startTime
+  );
+
+  const endMinutes = toMinutes(
+    workingDay.endTime
+  );
+
+  if (
+    !Number.isFinite(startMinutes) ||
+    !Number.isFinite(endMinutes) ||
+    startMinutes >= endMinutes
+  ) {
+    return [];
+  }
+
   const slots = [];
 
-  for (let hour = 9; hour <= 16; hour++) {
-    for (const minute of ["00", "30"]) {
-      slots.push(
-        `${String(hour).padStart(2, "0")}:${minute}`
-      );
-    }
+  for (
+    let minute = startMinutes;
+    minute + duration <= endMinutes;
+    minute += duration
+  ) {
+    slots.push(toTime(minute));
   }
 
   return slots;
 }
 
-const TIME_SLOTS = generateSlots();
+// Check if a booking is within the doctor's hours.
+function isValidDoctorSlot(doctor, date, time) {
+  return generateDoctorSlots(doctor, date)
+    .includes(time);
+}
 
-// Completed appointments still occupy their
-// historical slots. Cancelled appointments do not.
-const OCCUPIED_STATUSES = ["booked", "completed"];
+// Completed consultations remain occupied.
+// Cancelled appointments release their slots.
+const OCCUPIED_STATUSES = [
+  "booked",
+  "completed"
+];
 
 // =====================================
 // HOME
@@ -81,7 +159,7 @@ app.get("/", (req, res) => {
 });
 
 // =====================================
-// HOSPITALS
+// GET HOSPITALS
 // =====================================
 
 app.get("/api/hospitals", async (req, res) => {
@@ -93,6 +171,7 @@ app.get("/api/hospitals", async (req, res) => {
     res.json(hospitals);
   } catch (error) {
     console.error("Hospitals error:", error.message);
+
     res.status(500).json({
       message: "Unable to fetch hospitals"
     });
@@ -100,7 +179,7 @@ app.get("/api/hospitals", async (req, res) => {
 });
 
 // =====================================
-// DOCTORS
+// GET DOCTORS
 // =====================================
 
 app.get("/api/doctors", async (req, res) => {
@@ -112,6 +191,7 @@ app.get("/api/doctors", async (req, res) => {
     res.json(doctors);
   } catch (error) {
     console.error("Doctors error:", error.message);
+
     res.status(500).json({
       message: "Unable to fetch doctors"
     });
@@ -119,7 +199,7 @@ app.get("/api/doctors", async (req, res) => {
 });
 
 // =====================================
-// PATIENT QUEUE
+// PATIENT QUEUE - GET
 // =====================================
 
 app.get("/api/patients", async (req, res) => {
@@ -131,11 +211,16 @@ app.get("/api/patients", async (req, res) => {
     res.json(patients);
   } catch (error) {
     console.error("Patients error:", error.message);
+
     res.status(500).json({
       message: "Unable to fetch patients"
     });
   }
 });
+
+// =====================================
+// PATIENT QUEUE - POST
+// =====================================
 
 app.post("/api/patients", async (req, res) => {
   try {
@@ -170,11 +255,16 @@ app.post("/api/patients", async (req, res) => {
     });
   } catch (error) {
     console.error("Add patient error:", error.message);
+
     res.status(500).json({
       message: "Unable to add patient"
     });
   }
 });
+
+// =====================================
+// COMPLETE PATIENT CONSULTATION
+// =====================================
 
 app.patch(
   "/api/patients/:id/complete",
@@ -189,8 +279,13 @@ app.patch(
       }
 
       const patient = await Patient.findOneAndUpdate(
-        { _id: id, status: "waiting" },
-        { $set: { status: "completed" } },
+        {
+          _id: id,
+          status: "waiting"
+        },
+        {
+          $set: { status: "completed" }
+        },
         {
           returnDocument: "after",
           runValidators: true
@@ -221,84 +316,108 @@ app.patch(
 );
 
 // =====================================
-// DYNAMIC APPOINTMENT SLOTS
+// DAY 36: APPOINTMENT AVAILABILITY
 // =====================================
 
-app.get("/api/appointments/slots", async (req, res) => {
-  try {
-    const { doctor, date } = req.query;
+app.get(
+  "/api/appointments/slots",
+  async (req, res) => {
+    try {
+      const { doctor, date } = req.query;
 
-    if (
-      typeof doctor !== "string" ||
-      !mongoose.isValidObjectId(doctor) ||
-      !validDate(date)
-    ) {
-      return res.status(400).json({
-        message: "Valid doctor ID and date are required"
-      });
-    }
-
-    const selectedDoctor = await Doctor.findById(doctor);
-
-    if (!selectedDoctor) {
-      return res.status(404).json({
-        message: "Doctor not found"
-      });
-    }
-
-    if (!selectedDoctor.isAvailable) {
-      return res.status(400).json({
-        message: "Doctor is currently unavailable"
-      });
-    }
-
-    const appointments = await Appointment.find({
-      doctor,
-      appointmentDate: date,
-      status: { $in: OCCUPIED_STATUSES }
-    }).select("appointmentTime");
-
-    const occupiedTimes = new Set(
-      appointments.map(item => item.appointmentTime)
-    );
-
-    const now = getIndiaNow();
-    const weekend = isWeekend(date);
-
-    const slots = TIME_SLOTS.map(time => {
-      const past =
-        date < now.date ||
-        (date === now.date && time <= now.time);
-
-      let reason = null;
-
-      if (weekend) {
-        reason = "Closed";
-      } else if (past) {
-        reason = "Past";
-      } else if (occupiedTimes.has(time)) {
-        reason = "Booked";
+      if (
+        typeof doctor !== "string" ||
+        !mongoose.isValidObjectId(doctor) ||
+        !validDate(date)
+      ) {
+        return res.status(400).json({
+          message: "Valid doctor ID and date are required"
+        });
       }
 
-      return {
-        time,
-        available: reason === null,
-        reason
-      };
-    });
+      const selectedDoctor = await Doctor.findById(
+        doctor
+      );
 
-    res.json({
-      doctor: selectedDoctor._id,
-      date,
-      slots
-    });
-  } catch (error) {
-    console.error("Slot error:", error.message);
-    res.status(500).json({
-      message: "Unable to load appointment slots"
-    });
+      if (!selectedDoctor) {
+        return res.status(404).json({
+          message: "Doctor not found"
+        });
+      }
+
+      if (!selectedDoctor.isAvailable) {
+        return res.status(400).json({
+          message: "Doctor is currently unavailable"
+        });
+      }
+
+      // Generate times from this doctor's schedule.
+      const scheduledTimes = generateDoctorSlots(
+        selectedDoctor,
+        date
+      );
+
+      // Only look for occupied appointments.
+      const appointments = await Appointment.find({
+        doctor,
+        appointmentDate: date,
+        status: {
+          $in: OCCUPIED_STATUSES
+        }
+      }).select("appointmentTime");
+
+      const occupiedTimes = new Set(
+        appointments.map(
+          item => item.appointmentTime
+        )
+      );
+
+      const now = getIndiaNow();
+
+      const slots = scheduledTimes.map(time => {
+        const past =
+          date < now.date ||
+          (
+            date === now.date &&
+            time <= now.time
+          );
+
+        let reason = null;
+
+        if (past) {
+          reason = "Past";
+        } else if (occupiedTimes.has(time)) {
+          reason = "Booked";
+        }
+
+        return {
+          time,
+          available: reason === null,
+          reason
+        };
+      });
+
+      res.json({
+        doctor: selectedDoctor._id,
+        doctorName: selectedDoctor.name,
+        date,
+        slotDurationMinutes:
+          selectedDoctor.slotDurationMinutes,
+        workingToday: scheduledTimes.length > 0,
+        slots
+      });
+    } catch (error) {
+      console.error(
+        "Availability error:",
+        error.message
+      );
+
+      res.status(500).json({
+        message: "Unable to retrieve available slots"
+      });
+    }
   }
-});
+);
 
 // =====================================
 // GET APPOINTMENT HISTORY
@@ -306,14 +425,20 @@ app.get("/api/appointments/slots", async (req, res) => {
 
 app.get("/api/appointments", async (req, res) => {
   try {
-    // Preserve older records, but display only
-    // documents using the current ObjectId schema.
+    // Preserve old-format documents in MongoDB.
+    // Return current-schema appointments only.
     const appointments = await Appointment.find({
       hospital: { $type: "objectId" },
       doctor: { $type: "objectId" }
     })
-      .populate("hospital", "name location")
-      .populate("doctor", "name specialization")
+      .populate(
+        "hospital",
+        "name location"
+      )
+      .populate(
+        "doctor",
+        "name specialization"
+      )
       .sort({
         appointmentDate: 1,
         appointmentTime: 1
@@ -322,6 +447,7 @@ app.get("/api/appointments", async (req, res) => {
     res.json(appointments);
   } catch (error) {
     console.error("History error:", error.message);
+
     res.status(500).json({
       message: "Unable to fetch appointments"
     });
@@ -329,7 +455,7 @@ app.get("/api/appointments", async (req, res) => {
 });
 
 // =====================================
-// BOOK APPOINTMENT
+// DAY 36: BOOK WITH DOCTOR SCHEDULE
 // =====================================
 
 app.post("/api/appointments", async (req, res) => {
@@ -365,39 +491,48 @@ app.post("/api/appointments", async (req, res) => {
 
     if (
       !validDate(appointmentDate) ||
-      !TIME_SLOTS.includes(appointmentTime)
+      typeof appointmentTime !== "string" ||
+      !/^([01]\d|2[0-3]):[0-5]\d$/.test(appointmentTime)
     ) {
       return res.status(400).json({
-        message: "Invalid appointment date or time slot"
+        message: "Invalid appointment date or time"
       });
     }
 
-    const hospitalRecord = await Hospital.findById(
+    const selectedHospital = await Hospital.findById(
       hospital
     );
 
-    if (!hospitalRecord) {
+    if (!selectedHospital) {
       return res.status(404).json({
         message: "Hospital not found"
       });
     }
 
-    const doctorRecord = await Doctor.findOne({
+    const selectedDoctor = await Doctor.findOne({
       _id: doctor,
       hospital,
       isAvailable: true
     });
 
-    if (!doctorRecord) {
+    if (!selectedDoctor) {
       return res.status(400).json({
         message:
-          "Doctor is unavailable or belongs to another hospital"
+          "Doctor is unavailable or not assigned to this hospital"
       });
     }
 
-    if (isWeekend(appointmentDate)) {
+    // IMPORTANT: Validate against the doctor's own hours.
+    if (
+      !isValidDoctorSlot(
+        selectedDoctor,
+        appointmentDate,
+        appointmentTime
+      )
+    ) {
       return res.status(400).json({
-        message: "Appointments are available Monday to Friday"
+        message:
+          "Doctor does not work at the selected date or time"
       });
     }
 
@@ -405,15 +540,18 @@ app.post("/api/appointments", async (req, res) => {
 
     if (
       appointmentDate < now.date ||
-      (appointmentDate === now.date &&
-        appointmentTime <= now.time)
+      (
+        appointmentDate === now.date &&
+        appointmentTime <= now.time
+      )
     ) {
       return res.status(400).json({
         message: "Cannot book an appointment in the past"
       });
     }
 
-    // A completed appointment must not be rebooked.
+    // A completed historical appointment cannot
+    // be booked again.
     const completedSlot = await Appointment.exists({
       doctor,
       appointmentDate,
@@ -423,12 +561,13 @@ app.post("/api/appointments", async (req, res) => {
 
     if (completedSlot) {
       return res.status(409).json({
-        message: "This appointment slot is already occupied"
+        message:
+          "This appointment slot is already occupied"
       });
     }
 
-    // Existing unique MongoDB index also prevents
-    // concurrent duplicate active 'booked' records.
+    // Existing unique MongoDB index prevents two
+    // active booked appointments for the same slot.
     const appointment = await Appointment.create({
       patientName: patientName.trim(),
       hospital,
@@ -450,6 +589,7 @@ app.post("/api/appointments", async (req, res) => {
     }
 
     console.error("Booking error:", error.message);
+
     res.status(500).json({
       message: "Unable to book appointment"
     });
@@ -478,15 +618,23 @@ app.patch(
           status: "booked"
         },
         {
-          $set: { status: "cancelled" }
+          $set: {
+            status: "cancelled"
+          }
         },
         {
           returnDocument: "after",
           runValidators: true
         }
       )
-        .populate("hospital", "name location")
-        .populate("doctor", "name specialization");
+        .populate(
+          "hospital",
+          "name location"
+        )
+        .populate(
+          "doctor",
+          "name specialization"
+        );
 
       if (!appointment) {
         return res.status(404).json({
@@ -500,7 +648,11 @@ app.patch(
         appointment
       });
     } catch (error) {
-      console.error("Cancel error:", error.message);
+      console.error(
+        "Cancellation error:",
+        error.message
+      );
+
       res.status(500).json({
         message: "Unable to cancel appointment"
       });
@@ -524,24 +676,29 @@ app.patch(
         });
       }
 
-      // Only booked appointments can be completed.
-      // This is atomic: two requests cannot both
-      // change a booked record successfully.
       const appointment = await Appointment.findOneAndUpdate(
         {
           _id: id,
           status: "booked"
         },
         {
-          $set: { status: "completed" }
+          $set: {
+            status: "completed"
+          }
         },
         {
           returnDocument: "after",
           runValidators: true
         }
       )
-        .populate("hospital", "name location")
-        .populate("doctor", "name specialization");
+        .populate(
+          "hospital",
+          "name location"
+        )
+        .populate(
+          "doctor",
+          "name specialization"
+        );
 
       if (!appointment) {
         return res.status(404).json({
@@ -555,7 +712,11 @@ app.patch(
         appointment
       });
     } catch (error) {
-      console.error("Completion error:", error.message);
+      console.error(
+        "Completion error:",
+        error.message
+      );
+
       res.status(500).json({
         message: "Unable to complete appointment"
       });
@@ -564,7 +725,7 @@ app.patch(
 );
 
 // =====================================
-// START BACKEND
+// START SERVER
 // =====================================
 
 async function startServer() {
@@ -583,6 +744,7 @@ async function startServer() {
       "Server startup error:",
       error.message
     );
+
     process.exit(1);
   }
 }

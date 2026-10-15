@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 
 import Stats from "./components/Stats";
@@ -7,6 +6,9 @@ import QueueList from "./components/QueueList";
 import DoctorList from "./components/DoctorList";
 import AppointmentForm from "./components/AppointmentForm";
 import AppointmentHistory from "./components/AppointmentHistory";
+import DoctorManagement from "./components/DoctorManagement";
+import StaffGate from "./components/StaffGate";
+
 
 import "./App.css";
 
@@ -21,6 +23,9 @@ function App() {
     useState(0);
 
   const [availabilityRefreshKey, setAvailabilityRefreshKey] =
+    useState(0);
+
+  const [doctorRefreshKey, setDoctorRefreshKey] =
     useState(0);
 
   async function loadPatients() {
@@ -100,7 +105,8 @@ function App() {
 
       if (!response.ok) {
         throw new Error(
-          result.message || "Unable to complete consultation"
+          result.message ||
+          "Unable to complete consultation"
         );
       }
 
@@ -112,17 +118,17 @@ function App() {
     }
   }
 
-  // Called when a new booking succeeds
   function handleAppointmentBooked() {
     setHistoryRefreshKey(value => value + 1);
   }
 
-  // Called when a booking is cancelled
-  function handleAppointmentCancelled() {
+  function handleAppointmentStatusChange() {
     setHistoryRefreshKey(value => value + 1);
+    setAvailabilityRefreshKey(value => value + 1);
+  }
 
-    // Remount the form so it reloads slot availability.
-    // This also clears an unfinished form selection.
+  function handleDoctorUpdated() {
+    setDoctorRefreshKey(value => value + 1);
     setAvailabilityRefreshKey(value => value + 1);
   }
 
@@ -170,10 +176,12 @@ function App() {
         onClick={completePatient}
         disabled={saving || waitingPatients.length === 0}
       >
-        {saving ? "Processing..." : "Complete Next Patient"}
+        {saving
+          ? "Processing..."
+          : "Complete Next Patient"}
       </button>
 
-      <DoctorList />
+      <DoctorList key={doctorRefreshKey} />
 
       <AppointmentForm
         key={availabilityRefreshKey}
@@ -182,8 +190,14 @@ function App() {
 
       <AppointmentHistory
         refreshKey={historyRefreshKey}
-        onAppointmentCancelled={handleAppointmentCancelled}
+        onAppointmentCancelled={handleAppointmentStatusChange}
       />
+       <StaffGate>
+  <DoctorManagement
+    onUpdated={handleDoctorUpdated}
+  />
+</StaffGate>
+      
     </main>
   );
 }
